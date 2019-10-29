@@ -1,5 +1,6 @@
 defmodule ExAws.InstanceMeta do
   @moduledoc false
+  require Logger
 
   # Provides access to the AWS Instance MetaData
   # http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-metadata.html
@@ -19,14 +20,15 @@ defmodule ExAws.InstanceMeta do
         body
 
       {:ok, %{status_code: status_code}} ->
-        raise """
+        Logger.error """
         Instance Meta Error: HTTP response status code #{inspect(status_code)}
 
         Please check AWS EC2 IAM role.
         """
+        {:error, :error_iam_role}
 
       error ->
-        raise """
+        Logger.error """
         Instance Meta Error: #{inspect(error)}
 
         You tried to access the AWS EC2 instance meta, but it could not be reached.
@@ -42,6 +44,7 @@ defmodule ExAws.InstanceMeta do
         ExAws.Config.new(:dynamodb)
         ```
         """
+        {:error, :error_s3_configs}
     end
   end
 
@@ -56,16 +59,18 @@ defmodule ExAws.InstanceMeta do
 
       uri ->
         ExAws.InstanceMeta.request(config, @task_role_root <> uri)
-        |> config.json_codec.decode!
     end
   end
 
   def instance_role_credentials(config) do
-    ExAws.InstanceMeta.request(
+    case ExAws.InstanceMeta.request(
       config,
       @meta_path_root <> "/iam/security-credentials/#{instance_role(config)}"
-    )
-    |> config.json_codec.decode!
+    ) do
+      {:ok, body} ->
+        body |> config.json_codec.decode!
+      err -> err
+    end
   end
 
   def security_credentials(config) do
